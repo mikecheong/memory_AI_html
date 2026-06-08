@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Persistent Memory Workspace</title>
+    <title>Direct Memory Workspace</title>
     <style>
         :root {
             --bg-primary: #1e1e2e;
@@ -85,7 +85,7 @@
         .settings-btn { position: absolute; top: 10px; right: 12px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-normal); border-radius: 14px; padding: 4px 10px; font-size: 0.8em; cursor: pointer; z-index: 10; }
         .settings-modal { display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95); padding: 20px; flex-direction: column; justify-content: center; z-index: 100; box-sizing: border-box; }
         .settings-modal h2 { margin-top: 0; color: var(--accent); }
-        .settings-row { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+        .settings-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
         .settings-row label { font-size: 0.8em; color: var(--text-muted); }
         .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); }
     </style>
@@ -124,16 +124,14 @@
 
     <div class="settings-modal" id="config-panel">
         <h2>Engine Credentials Setup</h2>
-        <div class="settings-row"><label>API Key</label><input type="password" id="cfg-key"></div>
-        <div class="settings-row"><label>Model String</label><input type="text" id="cfg-model" value="gemini-3.5-flash"></div>
-        <div class="settings-row"><label>Endpoint Address URL</label><input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"></div>
-        <div class="settings-row"><label>Cloudflare Proxy Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://...workers.dev"></div>
+        <div class="settings-row"><label>Gemini API Key</label><input type="password" id="cfg-key" placeholder="AIzaSy..."></div>
+        <div class="settings-row"><label>Model String</label><input type="text" id="cfg-model" value="gemini-1.5-flash"></div>
         <button class="chat-send-btn" style="height: 44px; margin-top: 10px;" onclick="saveConfig()">Save Configurations</button>
     </div>
 </div>
 
 <script>
-    let config = JSON.parse(localStorage.getItem('local_agent_config')) || { key: '', model: 'gemini-3.5-flash', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', gateway: '' };
+    let config = JSON.parse(localStorage.getItem('direct_agent_config')) || { key: '', model: 'gemini-1.5-flash' };
     let virtualFiles = JSON.parse(localStorage.getItem('persistent_file_vault')) || {};
     let conversationHistory = JSON.parse(localStorage.getItem('persistent_chat_history')) || [];
     let currentSelectedFile = null;
@@ -141,12 +139,10 @@
     window.onload = () => {
         document.getElementById('cfg-key').value = config.key;
         document.getElementById('cfg-model').value = config.model;
-        document.getElementById('cfg-url').value = config.url;
-        document.getElementById('cfg-gateway').value = config.gateway || '';
         
         rebuildChatUIFromCache();
         updateFileTreeUI();
-        if(!config.key || !config.gateway) toggleSettings(true);
+        if(!config.key) toggleSettings(true);
     };
 
     function toggleSettings(show) { document.getElementById('config-panel').style.display = show ? 'flex' : 'none'; }
@@ -154,9 +150,7 @@
     function saveConfig() {
         config.key = document.getElementById('cfg-key').value.trim();
         config.model = document.getElementById('cfg-model').value.trim();
-        config.url = document.getElementById('cfg-url').value.trim();
-        config.gateway = document.getElementById('cfg-gateway').value.trim();
-        localStorage.setItem('local_agent_config', JSON.stringify(config));
+        localStorage.setItem('direct_agent_config', JSON.stringify(config));
         toggleSettings(false);
     }
 
@@ -180,13 +174,12 @@
         if(conversationHistory.length === 0) {
             const box = document.createElement('div');
             box.className = "msg-bubble agent-bubble";
-            box.innerHTML = `System active. Ask me to map your 10-layer memory logs. All messages and notes persist across window closures automatically.`;
+            box.innerHTML = `Direct Cloud Sandbox active. Connected directly to Google APIs with no external proxies or servers. Ready for structural commands.`;
             stream.appendChild(box);
             return;
         }
 
         conversationHistory.forEach(msg => {
-            if(msg.role === 'system') return;
             const box = document.createElement('div');
             box.className = msg.role === 'user' ? "msg-bubble user-bubble" : "msg-bubble agent-bubble";
             
@@ -289,27 +282,38 @@
            </write_html>
         2. Speak conversationally OUTSIDE of the tags.`;
 
+        // TRANSLATE CHAT HISTORY INTO NATIVE GOOGLE API SCHEMA
+        const nativeGeminiContents = conversationHistory.map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }));
+
         try {
-            let fetchUrl = config.gateway ? config.gateway : config.url;
+            // Native client-side endpoint string formula
+            let fetchUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.key}`;
+            
             let fetchOptions = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    url: config.url,
-                    key: config.key,
-                    model: config.model,
-                    messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ]
+                    contents: nativeGeminiContents,
+                    systemInstruction: {
+                        parts: [{ text: baseSystemFramePrompt }]
+                    },
+                    generationConfig: {
+                        temperature: 0.3
+                    }
                 })
             };
 
             const response = await fetch(fetchUrl, fetchOptions);
-            if(response.status !== 200) throw new Error(`Server Proxy Connection Error: ${response.status}`);
+            if(response.status !== 200) throw new Error(`Google Cloud Connection Rejection: ${response.status}`);
             
             const data = await response.json();
             
-            if (data.error) throw new Error(data.error);
-            
-            const aiResponseContent = data.choices[0].message.content;
+            // Extract text from native Google response layout
+            if (!data.candidates || !data.candidates[0].content) throw new Error("Malformed response from Google API.");
+            const aiResponseContent = data.candidates[0].content.parts[0].text;
             
             conversationHistory.push({ role: "assistant", content: aiResponseContent });
             localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
