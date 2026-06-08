@@ -73,7 +73,7 @@
         .msg-bubble { padding: 12px 14px; border-radius: 14px; max-width: 85%; font-size: 0.95em; line-height: 1.4; }
         .user-bubble { background-color: var(--user-bubble); color: var(--text-on-accent); align-self: flex-end; border-bottom-right-radius: 2px; }
         .agent-bubble { background-color: var(--bg-secondary); color: var(--text-normal); border-left: 3px solid var(--accent); align-self: flex-start; border-bottom-left-radius: 2px; }
-        .error-bubble { background-color: rgba(243, 139, 168, 0.1); border: 1px solid #f38ba8; color: #f38ba8; align-self: center; }
+        .error-bubble { background-color: rgba(243, 139, 168, 0.1); border: 1px solid #f38ba8; color: #f38ba8; align-self: center; text-align: center; }
 
         .file-download-badge {
             margin-top: 8px; padding: 8px 12px; background: var(--bg-tertiary);
@@ -85,8 +85,10 @@
             display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95);
             padding: 20px; flex-direction: column; justify-content: center; z-index: 100; box-sizing: border-box;
         }
-        .settings-row { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
-        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); }
+        .settings-modal h2 { margin-top: 0; color: var(--accent); }
+        .settings-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+        .settings-row label { font-size: 0.85em; color: var(--text-muted); font-weight: 500; }
+        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -118,12 +120,11 @@
             <label>Endpoint Address URL</label>
             <input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions">
         </div>
-        <!-- NEW ACTION ROW TO RESOLVE CORS ISSUES IN SAFARI -->
         <div class="settings-row">
             <label>Google Apps Script Gateway URL</label>
             <input type="text" id="cfg-gateway" placeholder="https://script.google.com/macros/s/.../exec">
         </div>
-        <button class="chat-send-btn" style="height: 44px;" onclick="saveConfig()">Save Configurations</button>
+        <button class="chat-send-btn" style="height: 44px; margin-top: 10px;" onclick="saveConfig()">Save Configurations</button>
     </div>
 </div>
 
@@ -199,21 +200,20 @@
            <write_html path="Folder_Name/Sub_Folder/Note_Name.html">
            <!DOCTYPE html>
            <html>
-           <!-- Put your complete page styling layout and contents here -->
            </html>
            </write_html>
         2. Keep your conversational dialogue to the user OUTSIDE of these tag boundaries. Discuss what architectural steps you mapped out naturally. Never ask the user to copy-paste code.
         3. Every HTML file you generate must lead with a clean Local Neighborhood TOC navigation panel displaying its direct parent link, internal anchors, and immediate child node items.`;
 
         try {
-            // ROUTING REDIRECTION INTERCEPTION LOGIC
             let fetchUrl = config.gateway ? config.gateway : config.url;
             let fetchOptions = {};
 
             if (config.gateway) {
+                // FIXED: Using text/plain content type headers stops Safari from triggering preflight errors
                 fetchOptions = {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({
                         url: config.url,
                         key: config.key,
@@ -224,10 +224,7 @@
             } else {
                 fetchOptions = {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${config.key}`,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: config.model,
                         messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ],
