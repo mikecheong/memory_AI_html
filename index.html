@@ -127,7 +127,7 @@
         <div class="settings-row"><label>API Key</label><input type="password" id="cfg-key"></div>
         <div class="settings-row"><label>Model String</label><input type="text" id="cfg-model" value="gemini-3.5-flash"></div>
         <div class="settings-row"><label>Endpoint Address URL</label><input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"></div>
-        <div class="settings-row"><label>Google Apps Script Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://script.google.com/macros/s/.../exec"></div>
+        <div class="settings-row"><label>Cloudflare Proxy Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://...workers.dev"></div>
         <button class="chat-send-btn" style="height: 44px; margin-top: 10px;" onclick="saveConfig()">Save Configurations</button>
     </div>
 </div>
@@ -291,36 +291,24 @@
 
         try {
             let fetchUrl = config.gateway ? config.gateway : config.url;
-            let fetchOptions = {};
-
-            if (config.gateway) {
-                fetchOptions = {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    redirect: 'follow',
-                    body: JSON.stringify({
-                        url: config.url,
-                        key: config.key,
-                        model: config.model,
-                        messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ]
-                    })
-                };
-            } else {
-                fetchOptions = {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: config.model,
-                        messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ],
-                        temperature: 0.3
-                    })
-                };
-            }
+            let fetchOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: config.url,
+                    key: config.key,
+                    model: config.model,
+                    messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ]
+                })
+            };
 
             const response = await fetch(fetchUrl, fetchOptions);
-            if(response.status !== 200) throw new Error(`Server Sync Error: ${response.status}`);
+            if(response.status !== 200) throw new Error(`Server Proxy Connection Error: ${response.status}`);
             
             const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
             const aiResponseContent = data.choices[0].message.content;
             
             conversationHistory.push({ role: "assistant", content: aiResponseContent });
