@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Memory Web Workspace</title>
+    <style>
+        :root {
+            --bg-primary: #1e1e2e;
+            --bg-secondary: #181825;
+            --bg-tertiary: #11111b;
+            --text-normal: #cdd6f4;
+            --text-muted: #a6adc8;
+            --accent: #cba6f7;
+            --user-bubble: #89b4fa;
+            --text-on-accent: #11111b;
+            --border: #313244;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            height: 100%; width: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-normal);
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex; flex-direction: column; height: 100%; width: 100%; position: relative;
+        }
+
+        .chat-header {
+            margin: 0; padding: 14px;
+            font-size: 1.1em; font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            color: var(--accent); background-color: var(--bg-tertiary);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .settings-btn {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            color: var(--text-normal); border-radius: 14px; padding: 4px 10px;
+            font-size: 0.8em; cursor: pointer;
+        }
+
+        .chat-input-container {
+            display: flex; gap: 8px; padding: 12px;
+            background-color: var(--bg-primary);
+            border-bottom: 1px dashed var(--border);
+            flex-shrink: 0;
+        }
+
+        .chat-input-box {
+            flex-grow: 1; height: 42px; resize: none; border-radius: 8px;
+            border: 1px solid var(--border); background-color: var(--bg-secondary);
+            color: var(--text-normal); padding: 10px; font-size: 0.95em;
+            box-sizing: border-box;
+        }
+
+        .chat-send-btn {
+            background-color: var(--accent); color: var(--text-on-accent);
+            border: none; padding: 0 16px; border-radius: 8px;
+            cursor: pointer; font-weight: 600;
+        }
+
+        .chat-history-area {
+            flex-grow: 1; overflow-y: auto; padding: 12px;
+            display: flex; flex-direction: column; gap: 12px;
+            padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+        }
+
+        .msg-bubble { padding: 12px 14px; border-radius: 14px; max-width: 85%; font-size: 0.95em; line-height: 1.4; }
+        .user-bubble { background-color: var(--user-bubble); color: var(--text-on-accent); align-self: flex-end; border-bottom-right-radius: 2px; }
+        .agent-bubble { background-color: var(--bg-secondary); color: var(--text-normal); border-left: 3px solid var(--accent); align-self: flex-start; border-bottom-left-radius: 2px; }
+        .error-bubble { background-color: rgba(243, 139, 168, 0.1); border: 1px solid #f38ba8; color: #f38ba8; align-self: center; }
+
+        .file-download-badge {
+            margin-top: 8px; padding: 8px 12px; background: var(--bg-tertiary);
+            border: 1px solid var(--border); border-radius: 6px; display: inline-flex;
+            align-items: center; gap: 8px; cursor: pointer; font-size: 0.85em; color: var(--accent);
+        }
+
+        .settings-modal {
+            display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95);
+            padding: 20px; flex-direction: column; justify-content: center; z-index: 100;
+        }
+        .settings-row { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="chat-header">
+        <span>Memory Tree Core</span>
+        <button class="settings-btn" onclick="toggleSettings(true)">⚙ Setup</button>
+    </div>
+
+    <!-- Pinned Top Input Bar Tray -->
+    <div class="chat-input-container">
+        <textarea class="chat-input-box" id="user-input" placeholder="Execute structural note layers commands..."></textarea>
+        <button class="chat-send-btn" id="send-btn" onclick="handleMessage()">Send</button>
+    </div>
+
+    <div class="chat-history-area" id="chat-stream"></div>
+
+    <!-- Configuration Screen Menu Panel Overlay -->
+    <div class="settings-modal" id="config-panel">
+        <h2>Engine Credentials Setup</h2>
+        <div class="settings-row">
+            <label>API Key</label>
+            <input type="password" id="cfg-key" placeholder="AQ...">
+        </div>
+        <div class="settings-row">
+            <label>Model String</label>
+            <input type="text" id="cfg-model" value="gemini-3.5-flash">
+        </div>
+        <div class="settings-row">
+            <label>Endpoint Address URL</label>
+            <input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions">
+        </div>
+        <button class="chat-send-btn" style="height: 44px;" onclick="saveConfig()">Save Configurations</button>
+    </div>
+</div>
+
+<script>
+    let config = JSON.parse(localStorage.getItem('local_agent_config')) || { key: '', model: 'gemini-3.5-flash', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' };
+    let conversationHistory = [];
+
+    window.onload = () => {
+        document.getElementById('cfg-key').value = config.key;
+        document.getElementById('cfg-model').value = config.model;
+        document.getElementById('cfg-url').value = config.url;
+        renderWelcomeBubble();
+        if(!config.key) toggleSettings(true);
+    };
+
+    function toggleSettings(show) {
+        document.getElementById('config-panel').style.display = show ? 'flex' : 'none';
+    }
+
+    function saveConfig() {
+        config.key = document.getElementById('cfg-key').value.trim();
+        config.model = document.getElementById('cfg-model').value.trim();
+        config.url = document.getElementById('cfg-url').value.trim();
+        localStorage.setItem('local_agent_config', JSON.stringify(config));
+        toggleSettings(false);
+    }
+
+    function renderWelcomeBubble() {
+        const stream = document.getElementById('chat-stream');
+        const box = document.createElement('div');
+        box.className = "msg-bubble agent-bubble";
+        box.innerHTML = `System active. Ask me to map your 10-layer memory logs. When I build pages, you can download them directly into your file system.`;
+        stream.appendChild(box);
+    }
+
+    // LOCAL DOWNLOAD ENGINE TRIGGER: Saves target strings right to local iOS storage space paths
+    function downloadGeneratedFile(filename, textData) {
+        const structuralBlob = new Blob([textData], { type: 'text/html' });
+        const temporaryLinkElement = document.createElement('a');
+        temporaryLinkElement.download = filename.split('/').pop(); // Extract raw note name string
+        temporaryLinkElement.href = window.URL.createObjectURL(structuralBlob);
+        temporaryLinkElement.style.display = 'none';
+        document.body.appendChild(temporaryLinkElement);
+        temporaryLinkElement.click();
+        document.body.removeChild(temporaryLinkElement);
+    }
+
+    async function handleMessage() {
+        const inputEl = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const promptText = inputEl.value.trim();
+        if(!promptText || sendBtn.disabled) return;
+
+        inputEl.value = '';
+        sendBtn.disabled = true;
+
+        const stream = document.getElementById('chat-stream');
+        const userBox = document.createElement('div');
+        userBox.className = "msg-bubble user-bubble";
+        userBox.innerHTML = `<p style="margin:0; white-space:pre-wrap;">${promptText}</p>`;
+        stream.appendChild(userBox);
+        stream.scrollTop = stream.scrollHeight;
+
+        conversationHistory.push({ role: "user", content: promptText });
+
+        const baseSystemFramePrompt = `You are an interactive AI Hierarchical HTML Memory Website Builder Agent running inside a local browser file sandbox.
+        
+        Your primary task is to generate clean, modular, standalone HTML notes for a 10-layer deeply nested memory web layout.
+        
+        CRITICAL GENERATION SPECIFICATIONS:
+        1. If your response builds, structures, or updates a memory node note page, you MUST enclose that valid HTML page code string inside a functional tag block exactly like this:
+           <write_html path="Folder_Name/Sub_Folder/Note_Name.html">
+           <!DOCTYPE html>
+           <html>
+           <!-- Put your complete page styling layout and contents here -->
+           </html>
+           </write_html>
+        2. Keep your conversational dialogue to the user OUTSIDE of these tag boundaries. Discuss what architectural steps you mapped out naturally. Never ask the user to copy-paste code.
+        3. Every HTML file you generate must lead with a clean Local Neighborhood TOC navigation panel displaying its direct parent link, internal anchors, and immediate child node items.`;
+
+        try {
+            const response = await fetch(config.url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${config.key}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: config.model,
+                    messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ],
+                    temperature: 0.3
+                })
+            });
+
+            if(response.status !== 200) throw new Error(`API Connection rejection error code: ${response.status}`);
+            
+            const data = await response.json();
+            const aiResponseContent = data.choices[0].message.content;
+            conversationHistory.push({ role: "assistant", content: aiResponseContent });
+
+            const agentBox = document.createElement('div');
+            agentBox.className = "msg-bubble agent-bubble";
+
+            // Intercept file code segments out of conversation chunks
+            const htmlInterceptionRegex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
+            let match;
+            let cleanText = aiResponseContent;
+
+            const textParagraph = document.createElement('p');
+            textParagraph.style.margin = "0";
+            textParagraph.style.whiteSpace = "pre-wrap";
+            agentBox.appendChild(textParagraph);
+
+            while ((match = htmlInterceptionRegex.exec(aiResponseContent)) !== null) {
+                const filePathKey = match[1].trim();
+                const fileHtmlDataContent = match[2].trim();
+                
+                cleanText = cleanText.replace(match[0], ''); // Strip tags out of display string block
+
+                // Instantiates inline clickable utility download row elements inside the bubble space
+                const downBtn = document.createElement('div');
+                downBtn.className = "file-download-badge";
+                downBtn.innerHTML = `💾 Save File: <strong>${filePathKey.split('/').pop()}</strong>`;
+                downBtn.onclick = () => downloadGeneratedFile(filePathKey, fileHtmlDataContent);
+                agentBox.appendChild(downBtn);
+            }
+
+            textParagraph.innerText = cleanText.trim() || 'File compilation packages prepared below:';
+            stream.appendChild(agentBox);
+
+        } catch (e) {
+            const errBox = document.createElement('div');
+            errBox.className = "msg-bubble error-bubble";
+            errBox.innerHTML = `<p style="margin:0;">Workspace Synchronization Break: ${e.message}</p>`;
+            stream.appendChild(errBox);
+        } finally {
+            sendBtn.disabled = false;
+            stream.scrollTop = stream.scrollHeight;
+        }
+    }
+</script>
+
+</body>
+</html>
