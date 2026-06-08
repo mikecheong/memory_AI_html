@@ -187,4 +187,243 @@
             vaultFiles: virtualFiles,
             chatHistory: conversationHistory
         };
-        const stringifiedDump = JSON.stringify(full
+        const stringifiedDump = JSON.stringify(fullDataDump, null, 2);
+        const dataBlob = new Blob([stringifiedDump], { type: 'application/json' });
+        
+        const downLink = document.createElement('a');
+        downLink.download = "memory_vault_backup.json";
+        downLink.href = window.URL.createObjectURL(dataBlob);
+        downLink.style.display = 'none';
+        document.body.appendChild(downLink);
+        downLink.click();
+        document.body.removeChild(downLink);
+    }
+
+    // NEW IMPORT MACRO: Reads back raw package payloads and refreshes browser UI layouts dynamically
+    function importWholeVault(event) {
+        const selectedFile = event.target.files[0];
+        if (!selectedFile) return;
+
+        const fileReader = new FileReader();
+        fileReader.onload = function(e) {
+            try {
+                const parsedData = JSON.parse(e.target.result);
+                if (parsedData.vaultFiles && parsedData.chatHistory) {
+                    virtualFiles = parsedData.vaultFiles;
+                    conversationHistory = parsedData.chatHistory;
+                    
+                    localStorage.setItem('persistent_file_vault', JSON.stringify(virtualFiles));
+                    localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
+                    
+                    rebuildChatUIFromCache();
+                    updateFileTreeUI();
+                    alert("Memory website tree loaded and restored successfully!");
+                    toggleSettings(false);
+                } else {
+                    alert("Error: Selected JSON file does not match a valid memory vault schema layout structure.");
+                }
+            } catch (err) {
+                alert("Failed to parse vault database template data: " + err.message);
+            }
+        };
+        fileReader.readAsText(selectedFile);
+    }
+
+    function rebuildChatUIFromCache() {
+        const stream = document.getElementById('chat-stream');
+        stream.innerHTML = '';
+        
+        if(conversationHistory.length === 0) {
+            const box = document.createElement('div');
+            box.className = "msg-bubble agent-bubble";
+            box.innerHTML = `Direct Cloud Sandbox active. Connected directly to Google APIs with no external proxies or servers. Ready for structural commands.`;
+            stream.appendChild(box);
+            return;
+        }
+
+        conversationHistory.forEach(msg => {
+            const box = document.createElement('div');
+            box.className = msg.role === 'user' ? "msg-bubble user-bubble" : "msg-bubble agent-bubble";
+            
+            if(msg.role === 'user') {
+                box.innerHTML = `<p style="margin:0; white-space:pre-wrap;">${msg.content}</p>`;
+            } else {
+                let cleanText = msg.content;
+                const regex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
+                let match;
+                
+                const txtPara = document.createElement('p');
+                txtPara.style.margin = "0";
+                txtPara.style.whiteSpace = "pre-wrap";
+                box.appendChild(txtPara);
+
+                while((match = regex.exec(msg.content)) !== null) {
+                    const path = match[1];
+                    const data = match[2];
+                    cleanText = cleanText.replace(match[0], '');
+                    
+                    const downBtn = document.createElement('div');
+                    downBtn.className = "file-download-badge";
+                    downBtn.innerHTML = `💾 Save File: <strong>${path.split('/').pop()}</strong>`;
+                    downBtn.onclick = () => downloadGeneratedFile(path, data);
+                    box.appendChild(downBtn);
+                }
+                txtPara.innerText = cleanText.trim() || 'Notes compiled to your persistent database:';
+            }
+            stream.appendChild(box);
+        });
+        stream.scrollTop = stream.scrollHeight;
+    }
+
+    function updateFileTreeUI() {
+        const strip = document.getElementById('file-tree-list');
+        strip.innerHTML = '';
+        const keys = Object.keys(virtualFiles);
+
+        if(keys.length === 0) {
+            strip.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85em; padding: 6px;">No structural notes saved in database cache yet.</div>`;
+            return;
+        }
+
+        keys.forEach(path => {
+            const card = document.createElement('div');
+            card.className = "file-item";
+            card.innerText = `📄 ${path.split('/').pop()}`;
+            card.onclick = () => launchPagePreview(path);
+            strip.appendChild(card);
+        });
+    }
+
+    function launchPagePreview(path) {
+        currentSelectedFile = path;
+        const iframe = document.getElementById('browser-iframe');
+        document.getElementById('empty-preview-notice').style.display = 'none';
+        iframe.style.display = 'block';
+
+        const rawHtml = virtualFiles[path] || "<h3>Blank Document</h3>";
+        iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:-apple-system,sans-serif;padding:16px;background:#fafafa;color:#333;line-height:1.4;} a{color:#7057c7;text-decoration:none;font-weight:bold;}</style></head><body>${rawHtml}</body></html>`;
+    }
+
+    function downloadGeneratedFile(filename, textData) {
+        const structuralBlob = new Blob([textData], { type: 'text/html' });
+        const temporaryLinkElement = document.createElement('a');
+        temporaryLinkElement.download = filename.split('/').pop();
+        temporaryLinkElement.href = window.URL.createObjectURL(structuralBlob);
+        temporaryLinkElement.style.display = 'none';
+        document.body.appendChild(temporaryLinkElement);
+        temporaryLinkElement.click();
+        document.body.removeChild(temporaryLinkElement);
+    }
+
+    async function handleMessage() {
+        const inputEl = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const promptText = inputEl.value.trim();
+        if(!promptText || sendBtn.disabled) return;
+
+        inputEl.value = '';
+        sendBtn.disabled = true;
+
+        const stream = document.getElementById('chat-stream');
+        const userBox = document.createElement('div');
+        userBox.className = "msg-bubble user-bubble";
+        userBox.innerHTML = `<p style="margin:0; white-space:pre-wrap;">${promptText}</p>`;
+        stream.appendChild(userBox);
+        stream.scrollTop = stream.scrollHeight;
+
+        conversationHistory.push({ role: "user", content: promptText });
+        localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
+
+        const baseSystemFramePrompt = `You are an interactive AI Hierarchical HTML Memory Website Builder Agent running inside a browser sandbox.
+        Your task is to generate clean, modular standalone HTML notes for a 10-layer deeply nested memory web layout.
+        
+        CRITICAL RULES:
+        1. Wrap your file code cleanly inside a functional tag block exactly like this:
+           <write_html path="Folder/Note_Name.html">
+           <h3>Content Title</h3>
+           </write_html>
+        2. Speak conversationally OUTSIDE of the tags.`;
+
+        const nativeGeminiContents = conversationHistory.map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }));
+
+        try {
+            let fetchUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.key}`;
+            
+            let fetchOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: nativeGeminiContents,
+                    systemInstruction: {
+                        parts: [{ text: baseSystemFramePrompt }]
+                    },
+                    generationConfig: {
+                        temperature: 0.3
+                    }
+                })
+            };
+
+            const response = await fetch(fetchUrl, fetchOptions);
+            if(response.status !== 200) throw new Error(`Google Cloud Connection Rejection: ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (!data.candidates || !data.candidates[0].content) throw new Error("Malformed response from Google API.");
+            const aiResponseContent = data.candidates[0].content.parts[0].text;
+            
+            conversationHistory.push({ role: "assistant", content: aiResponseContent });
+            localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
+
+            const agentBox = document.createElement('div');
+            agentBox.className = "msg-bubble agent-bubble";
+            
+            const regex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
+            let match;
+            let cleanText = aiResponseContent;
+
+            const txtPara = document.createElement('p');
+            txtPara.style.margin = "0";
+            txtPara.style.whiteSpace = "pre-wrap";
+            agentBox.appendChild(txtPara);
+
+            let vaultAltered = false;
+            while ((match = regex.exec(aiResponseContent)) !== null) {
+                const pathKey = match[1].trim();
+                const fileContent = match[2].trim();
+                
+                cleanText = cleanText.replace(match[0], '');
+                
+                virtualFiles[pathKey] = fileContent;
+                vaultAltered = true;
+
+                const downBtn = document.createElement('div');
+                downBtn.className = "file-download-badge";
+                downBtn.innerHTML = `💾 Save File: <strong>${pathKey.split('/').pop()}</strong>`;
+                downBtn.onclick = () => downloadGeneratedFile(pathKey, fileContent);
+                agentBox.appendChild(downBtn);
+            }
+
+            if(vaultAltered) {
+                localStorage.setItem('persistent_file_vault', JSON.stringify(virtualFiles));
+            }
+
+            txtPara.innerText = cleanText.trim() || 'Notes compiled to your persistent database:';
+            stream.appendChild(agentBox);
+
+        } catch (e) {
+            const errBox = document.createElement('div');
+            errBox.className = "msg-bubble error-bubble";
+            errBox.innerHTML = `<p style="margin:0;">Workspace Synchronization Break: ${e.message}</p>`;
+            stream.appendChild(errBox);
+        } finally {
+            sendBtn.disabled = false;
+            stream.scrollTop = stream.scrollHeight;
+        }
+    }
+</script>
+
+</body>
+</html>
