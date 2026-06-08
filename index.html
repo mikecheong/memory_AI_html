@@ -83,7 +83,7 @@
 
         .settings-modal {
             display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95);
-            padding: 20px; flex-direction: column; justify-content: center; z-index: 100;
+            padding: 20px; flex-direction: column; justify-content: center; z-index: 100; box-sizing: border-box;
         }
         .settings-row { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
         .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); }
@@ -97,7 +97,6 @@
         <button class="settings-btn" onclick="toggleSettings(true)">⚙ Setup</button>
     </div>
 
-    <!-- Pinned Top Input Bar Tray -->
     <div class="chat-input-container">
         <textarea class="chat-input-box" id="user-input" placeholder="Execute structural note layers commands..."></textarea>
         <button class="chat-send-btn" id="send-btn" onclick="handleMessage()">Send</button>
@@ -105,7 +104,6 @@
 
     <div class="chat-history-area" id="chat-stream"></div>
 
-    <!-- Configuration Screen Menu Panel Overlay -->
     <div class="settings-modal" id="config-panel">
         <h2>Engine Credentials Setup</h2>
         <div class="settings-row">
@@ -120,20 +118,26 @@
             <label>Endpoint Address URL</label>
             <input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions">
         </div>
+        <!-- NEW ACTION ROW TO RESOLVE CORS ISSUES IN SAFARI -->
+        <div class="settings-row">
+            <label>Google Apps Script Gateway URL</label>
+            <input type="text" id="cfg-gateway" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
         <button class="chat-send-btn" style="height: 44px;" onclick="saveConfig()">Save Configurations</button>
     </div>
 </div>
 
 <script>
-    let config = JSON.parse(localStorage.getItem('local_agent_config')) || { key: '', model: 'gemini-3.5-flash', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' };
+    let config = JSON.parse(localStorage.getItem('local_agent_config')) || { key: '', model: 'gemini-3.5-flash', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', gateway: '' };
     let conversationHistory = [];
 
     window.onload = () => {
         document.getElementById('cfg-key').value = config.key;
         document.getElementById('cfg-model').value = config.model;
         document.getElementById('cfg-url').value = config.url;
+        document.getElementById('cfg-gateway').value = config.gateway || '';
         renderWelcomeBubble();
-        if(!config.key) toggleSettings(true);
+        if(!config.key || !config.gateway) toggleSettings(true);
     };
 
     function toggleSettings(show) {
@@ -144,6 +148,7 @@
         config.key = document.getElementById('cfg-key').value.trim();
         config.model = document.getElementById('cfg-model').value.trim();
         config.url = document.getElementById('cfg-url').value.trim();
+        config.gateway = document.getElementById('cfg-gateway').value.trim();
         localStorage.setItem('local_agent_config', JSON.stringify(config));
         toggleSettings(false);
     }
@@ -152,15 +157,14 @@
         const stream = document.getElementById('chat-stream');
         const box = document.createElement('div');
         box.className = "msg-bubble agent-bubble";
-        box.innerHTML = `System active. Ask me to map your 10-layer memory logs. When I build pages, you can download them directly into your file system.`;
+        box.innerHTML = `System active. Gateway configurations enabled to bypass standard Safari CORS tracking blocks. Ready for execution commands.`;
         stream.appendChild(box);
     }
 
-    // LOCAL DOWNLOAD ENGINE TRIGGER: Saves target strings right to local iOS storage space paths
     function downloadGeneratedFile(filename, textData) {
         const structuralBlob = new Blob([textData], { type: 'text/html' });
         const temporaryLinkElement = document.createElement('a');
-        temporaryLinkElement.download = filename.split('/').pop(); // Extract raw note name string
+        temporaryLinkElement.download = filename.split('/').pop();
         temporaryLinkElement.href = window.URL.createObjectURL(structuralBlob);
         temporaryLinkElement.style.display = 'none';
         document.body.appendChild(temporaryLinkElement);
@@ -202,20 +206,38 @@
         3. Every HTML file you generate must lead with a clean Local Neighborhood TOC navigation panel displaying its direct parent link, internal anchors, and immediate child node items.`;
 
         try {
-            const response = await fetch(config.url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${config.key}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: config.model,
-                    messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ],
-                    temperature: 0.3
-                })
-            });
+            // ROUTING REDIRECTION INTERCEPTION LOGIC
+            let fetchUrl = config.gateway ? config.gateway : config.url;
+            let fetchOptions = {};
 
-            if(response.status !== 200) throw new Error(`API Connection rejection error code: ${response.status}`);
+            if (config.gateway) {
+                fetchOptions = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: config.url,
+                        key: config.key,
+                        model: config.model,
+                        messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ]
+                    })
+                };
+            } else {
+                fetchOptions = {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${config.key}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: config.model,
+                        messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ],
+                        temperature: 0.3
+                    })
+                };
+            }
+
+            const response = await fetch(fetchUrl, fetchOptions);
+            if(response.status !== 200) throw new Error(`API Response Status Error: ${response.status}`);
             
             const data = await response.json();
             const aiResponseContent = data.choices[0].message.content;
@@ -224,7 +246,6 @@
             const agentBox = document.createElement('div');
             agentBox.className = "msg-bubble agent-bubble";
 
-            // Intercept file code segments out of conversation chunks
             const htmlInterceptionRegex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
             let match;
             let cleanText = aiResponseContent;
@@ -238,9 +259,8 @@
                 const filePathKey = match[1].trim();
                 const fileHtmlDataContent = match[2].trim();
                 
-                cleanText = cleanText.replace(match[0], ''); // Strip tags out of display string block
+                cleanText = cleanText.replace(match[0], '');
 
-                // Instantiates inline clickable utility download row elements inside the bubble space
                 const downBtn = document.createElement('div');
                 downBtn.className = "file-download-badge";
                 downBtn.innerHTML = `💾 Save File: <strong>${filePathKey.split('/').pop()}</strong>`;
