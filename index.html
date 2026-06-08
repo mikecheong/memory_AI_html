@@ -210,10 +210,11 @@
             let fetchOptions = {};
 
             if (config.gateway) {
-                // FIXED: Using text/plain content type headers stops Safari from triggering preflight errors
+                // FIXED: Omitting headers entirely simplifies the request format.
+                // This forces the browser to skip the preflightOPTIONS handshake entirely, bypassing CORS blocks.
                 fetchOptions = {
                     method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    redirect: 'follow', // Forces Safari and Chrome to cleanly track Google's internal link redirection parameters
                     body: JSON.stringify({
                         url: config.url,
                         key: config.key,
