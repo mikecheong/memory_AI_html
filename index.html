@@ -84,17 +84,15 @@
 
         .settings-btn { position: absolute; top: 10px; right: 12px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-normal); border-radius: 14px; padding: 4px 10px; font-size: 0.8em; cursor: pointer; z-index: 10; }
         .settings-modal { display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95); padding: 20px; flex-direction: column; justify-content: center; z-index: 100; box-sizing: border-box; overflow-y: auto; }
-        .settings-modal h2 { margin-top: 0; color: var(--accent); }
-        .settings-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
+        .settings-modal h2 { margin-top: 0; color: var(--accent); font-size: 1.2em; }
+        .settings-row { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
         .settings-row label { font-size: 0.8em; color: var(--text-muted); }
-        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); }
+        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); font-size: 0.95em; }
         
-        .backup-zone {
-            margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border);
-            display: flex; gap: 10px;
-        }
-        .util-btn { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-weight: 600; font-size: 0.85em; cursor: pointer; text-align: center; color: var(--text-normal); background: var(--bg-tertiary); }
+        .backup-zone { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 8px; }
+        .util-btn { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-weight: 600; font-size: 0.85em; cursor: pointer; text-align: center; color: var(--text-normal); background: var(--bg-tertiary); box-sizing: border-box; }
         .util-btn:hover { border-color: var(--accent); }
+        .danger-btn { background: rgba(243, 139, 168, 0.1); border-color: #f38ba8; color: #f38ba8; }
     </style>
 </head>
 <body>
@@ -133,30 +131,51 @@
         <h2>Engine Credentials Setup</h2>
         <div class="settings-row"><label>Gemini API Key</label><input type="password" id="cfg-key" placeholder="AIzaSy..."></div>
         <div class="settings-row"><label>Model String</label><input type="text" id="cfg-model" value="gemini-3.5-flash"></div>
-        <button class="chat-send-btn" style="height: 44px; margin-top: 5px;" onclick="saveConfig()">Save Configurations</button>
+        <div class="settings-row"><label>Google Apps Script Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://script.google.com/macros/s/.../exec"></div>
+        <button class="chat-send-btn" style="height: 44px; margin-top: 5px; width: 100%;" onclick="saveConfig()">Save Configurations</button>
         
         <h2>Vault Backup Systems</h2>
         <div class="backup-zone">
             <button class="util-btn" onclick="exportWholeVault()">📤 Export Whole Website</button>
-            <button class="util-btn" onclick="document.getElementById('import-file-picker').click()">📥 Import Website</button>
+            <button class="util-btn" onclick="document.getElementById('import-file-picker').click()">📥 Import Website JSON</button>
             <input type="file" id="import-file-picker" style="display: none;" accept=".json" onchange="importWholeVault(event)">
+            <button class="util-btn danger-btn" onclick="wipeLocalCacheMemory()">⚠️ Clear Cache Memory</button>
         </div>
     </div>
 </div>
 
 <script>
-    let config = JSON.parse(localStorage.getItem('direct_agent_config')) || { key: '', model: 'gemini-3.5-flash' };
-    let virtualFiles = JSON.parse(localStorage.getItem('persistent_file_vault')) || {};
-    let conversationHistory = JSON.parse(localStorage.getItem('persistent_chat_history')) || [];
-    let currentSelectedFile = null;
+    let config, virtualFiles, conversationHistory;
+
+    function initializeSystemCacheVaults() {
+        try {
+            config = JSON.parse(localStorage.getItem('gas_agent_config')) || { key: '', model: 'gemini-3.5-flash', gateway: '' };
+        } catch(e) {
+            config = { key: '', model: 'gemini-3.5-flash', gateway: '' };
+        }
+        try {
+            virtualFiles = JSON.parse(localStorage.getItem('persistent_file_vault')) || {};
+        } catch(e) {
+            virtualFiles = {};
+        }
+        try {
+            conversationHistory = JSON.parse(localStorage.getItem('persistent_chat_history')) || [];
+            if(!Array.isArray(conversationHistory)) conversationHistory = [];
+        } catch(e) {
+            conversationHistory = [];
+        }
+    }
 
     window.onload = () => {
-        document.getElementById('cfg-key').value = config.key;
-        document.getElementById('cfg-model').value = config.model;
+        initializeSystemCacheVaults();
+        
+        document.getElementById('cfg-key').value = config.key || '';
+        document.getElementById('cfg-model').value = config.model || 'gemini-3.5-flash';
+        document.getElementById('cfg-gateway').value = config.gateway || '';
         
         rebuildChatUIFromCache();
         updateFileTreeUI();
-        if(!config.key) toggleSettings(true);
+        if(!config.key || !config.gateway) toggleSettings(true);
     };
 
     function toggleSettings(show) { document.getElementById('config-panel').style.display = show ? 'flex' : 'none'; }
@@ -164,8 +183,16 @@
     function saveConfig() {
         config.key = document.getElementById('cfg-key').value.trim();
         config.model = document.getElementById('cfg-model').value.trim();
-        localStorage.setItem('direct_agent_config', JSON.stringify(config));
+        config.gateway = document.getElementById('cfg-gateway').value.trim();
+        localStorage.setItem('gas_agent_config', JSON.stringify(config));
         toggleSettings(false);
+    }
+
+    function wipeLocalCacheMemory() {
+        if(confirm("Completely wipe chat history and file tree?")) {
+            localStorage.clear();
+            location.reload();
+        }
     }
 
     function switchView(target) {
@@ -181,29 +208,17 @@
         }
     }
 
-    // NEW EXPORT MACRO: Packs chat stream history and all virtual files into a clean file package
     function exportWholeVault() {
-        const fullDataDump = {
-            vaultFiles: virtualFiles,
-            chatHistory: conversationHistory
-        };
-        const stringifiedDump = JSON.stringify(fullDataDump, null, 2);
-        const dataBlob = new Blob([stringifiedDump], { type: 'application/json' });
-        
+        const dataBlob = new Blob([JSON.stringify({ vaultFiles: virtualFiles, chatHistory: conversationHistory }, null, 2)], { type: 'application/json' });
         const downLink = document.createElement('a');
         downLink.download = "memory_vault_backup.json";
         downLink.href = window.URL.createObjectURL(dataBlob);
-        downLink.style.display = 'none';
-        document.body.appendChild(downLink);
         downLink.click();
-        document.body.removeChild(downLink);
     }
 
-    // NEW IMPORT MACRO: Reads back raw package payloads and refreshes browser UI layouts dynamically
     function importWholeVault(event) {
         const selectedFile = event.target.files[0];
         if (!selectedFile) return;
-
         const fileReader = new FileReader();
         fileReader.onload = function(e) {
             try {
@@ -211,20 +226,14 @@
                 if (parsedData.vaultFiles && parsedData.chatHistory) {
                     virtualFiles = parsedData.vaultFiles;
                     conversationHistory = parsedData.chatHistory;
-                    
                     localStorage.setItem('persistent_file_vault', JSON.stringify(virtualFiles));
                     localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
-                    
                     rebuildChatUIFromCache();
                     updateFileTreeUI();
-                    alert("Memory website tree loaded and restored successfully!");
+                    alert("System Restored!");
                     toggleSettings(false);
-                } else {
-                    alert("Error: Selected JSON file does not match a valid memory vault schema layout structure.");
                 }
-            } catch (err) {
-                alert("Failed to parse vault database template data: " + err.message);
-            }
+            } catch (err) { alert("Import error: " + err.message); }
         };
         fileReader.readAsText(selectedFile);
     }
@@ -232,23 +241,28 @@
     function rebuildChatUIFromCache() {
         const stream = document.getElementById('chat-stream');
         stream.innerHTML = '';
-        
         if(conversationHistory.length === 0) {
             const box = document.createElement('div');
             box.className = "msg-bubble agent-bubble";
-            box.innerHTML = `Direct Cloud Sandbox active. Connected directly to Google APIs with no external proxies or servers. Ready for structural commands.`;
+            box.innerHTML = `Gateway framework operating cleanly. Input your structure rules to begin charting notes.`;
             stream.appendChild(box);
             return;
         }
 
         conversationHistory.forEach(msg => {
+            if(!msg || typeof msg !== 'object') return;
+            const role = msg.role === 'model' || msg.role === 'assistant' ? 'assistant' : 'user';
+            let rawContent = msg.content || '';
+            if (typeof rawContent !== 'string') return;
+
             const box = document.createElement('div');
-            box.className = msg.role === 'user' ? "msg-bubble user-bubble" : "msg-bubble agent-bubble";
+            box.className = role === 'user' ? "msg-bubble user-bubble" : "msg-bubble agent-bubble";
             
-            if(msg.role === 'user') {
-                box.innerHTML = `<p style="margin:0; white-space:pre-wrap;">${msg.content}</p>`;
+            if(role === 'user') {
+                box.innerHTML = `<p style="margin:0; white-space:pre-wrap;"></p>`;
+                box.querySelector('p').innerText = rawContent;
             } else {
-                let cleanText = msg.content;
+                let cleanText = rawContent;
                 const regex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
                 let match;
                 
@@ -257,7 +271,7 @@
                 txtPara.style.whiteSpace = "pre-wrap";
                 box.appendChild(txtPara);
 
-                while((match = regex.exec(msg.content)) !== null) {
+                while((match = regex.exec(rawContent)) !== null) {
                     const path = match[1];
                     const data = match[2];
                     cleanText = cleanText.replace(match[0], '');
@@ -268,7 +282,7 @@
                     downBtn.onclick = () => downloadGeneratedFile(path, data);
                     box.appendChild(downBtn);
                 }
-                txtPara.innerText = cleanText.trim() || 'Notes compiled to your persistent database:';
+                txtPara.innerText = cleanText.trim() || 'Notes compiled to your database:';
             }
             stream.appendChild(box);
         });
@@ -278,13 +292,11 @@
     function updateFileTreeUI() {
         const strip = document.getElementById('file-tree-list');
         strip.innerHTML = '';
-        const keys = Object.keys(virtualFiles);
-
+        const keys = Object.keys(virtualFiles || {});
         if(keys.length === 0) {
-            strip.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85em; padding: 6px;">No structural notes saved in database cache yet.</div>`;
+            strip.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85em; padding: 6px;">No structural notes saved yet.</div>`;
             return;
         }
-
         keys.forEach(path => {
             const card = document.createElement('div');
             card.className = "file-item";
@@ -299,7 +311,6 @@
         const iframe = document.getElementById('browser-iframe');
         document.getElementById('empty-preview-notice').style.display = 'none';
         iframe.style.display = 'block';
-
         const rawHtml = virtualFiles[path] || "<h3>Blank Document</h3>";
         iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:-apple-system,sans-serif;padding:16px;background:#fafafa;color:#333;line-height:1.4;} a{color:#7057c7;text-decoration:none;font-weight:bold;}</style></head><body>${rawHtml}</body></html>`;
     }
@@ -327,7 +338,8 @@
         const stream = document.getElementById('chat-stream');
         const userBox = document.createElement('div');
         userBox.className = "msg-bubble user-bubble";
-        userBox.innerHTML = `<p style="margin:0; white-space:pre-wrap;">${promptText}</p>`;
+        userBox.innerHTML = `<p style="margin:0; white-space:pre-wrap;"></p>`;
+        userBox.querySelector('p').innerText = promptText;
         stream.appendChild(userBox);
         stream.scrollTop = stream.scrollHeight;
 
@@ -344,34 +356,34 @@
            </write_html>
         2. Speak conversationally OUTSIDE of the tags.`;
 
+        // RE-MAP CHAT HISTORY MATRIX
         const nativeGeminiContents = conversationHistory.map(msg => ({
             role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }]
+            parts: [{ text: msg.content || '' }]
         }));
 
         try {
-            let fetchUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.key}`;
+            let directEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.key}`;
             
+            // CRITICAL: Content-Type text/plain tricks Safari into skipping the strict preflight options check
             let fetchOptions = {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({
+                    endpoint: directEndpoint,
+                    key: config.key,
+                    model: config.model,
                     contents: nativeGeminiContents,
-                    systemInstruction: {
-                        parts: [{ text: baseSystemFramePrompt }]
-                    },
-                    generationConfig: {
-                        temperature: 0.3
-                    }
+                    systemInstruction: baseSystemFramePrompt
                 })
             };
 
-            const response = await fetch(fetchUrl, fetchOptions);
-            if(response.status !== 200) throw new Error(`Google Cloud Connection Rejection: ${response.status}`);
+            const response = await fetch(config.gateway, fetchOptions);
+            if(response.status !== 200) throw new Error(`Gateway Rejection Code: ${response.status}`);
             
             const data = await response.json();
+            if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
             
-            if (!data.candidates || !data.candidates[0].content) throw new Error("Malformed response from Google API.");
             const aiResponseContent = data.candidates[0].content.parts[0].text;
             
             conversationHistory.push({ role: "assistant", content: aiResponseContent });
@@ -393,9 +405,7 @@
             while ((match = regex.exec(aiResponseContent)) !== null) {
                 const pathKey = match[1].trim();
                 const fileContent = match[2].trim();
-                
                 cleanText = cleanText.replace(match[0], '');
-                
                 virtualFiles[pathKey] = fileContent;
                 vaultAltered = true;
 
