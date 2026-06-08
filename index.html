@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Memory Web Workspace</title>
+    <title>Persistent Memory Workspace</title>
     <style>
         :root {
             --bg-primary: #1e1e2e;
@@ -30,45 +30,41 @@
             display: flex; flex-direction: column; height: 100%; width: 100%; position: relative;
         }
 
-        .chat-header {
-            margin: 0; padding: 14px;
-            font-size: 1.1em; font-weight: 600;
-            border-bottom: 1px solid var(--border);
-            color: var(--accent); background-color: var(--bg-tertiary);
-            display: flex; justify-content: space-between; align-items: center;
+        /* View Layout Tabs */
+        .tab-bar {
+            display: flex; background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border); flex-shrink: 0;
+        }
+        .tab-btn {
+            flex: 1; padding: 14px; background: none; border: none;
+            color: var(--text-muted); font-weight: 600; font-size: 0.95em;
+            cursor: pointer; text-align: center; border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .tab-btn.active {
+            color: var(--accent); border-bottom: 2px solid var(--accent);
+            background-color: rgba(203, 166, 247, 0.05);
         }
 
-        .settings-btn {
-            background: var(--bg-secondary); border: 1px solid var(--border);
-            color: var(--text-normal); border-radius: 14px; padding: 4px 10px;
-            font-size: 0.8em; cursor: pointer;
-        }
+        .view-content { flex-grow: 1; display: none; overflow: hidden; position: relative; }
+        .view-content.active { display: flex; flex-direction: column; }
 
+        /* Workspace View Layout */
+        .chat-wrapper { display: flex; flex-direction: column; height: 100%; padding: 12px; box-sizing: border-box; }
         .chat-input-container {
-            display: flex; gap: 8px; padding: 12px;
-            background-color: var(--bg-primary);
-            border-bottom: 1px dashed var(--border);
-            flex-shrink: 0;
+            display: flex; gap: 8px; padding-bottom: 12px;
+            background-color: var(--bg-primary); border-bottom: 1px dashed var(--border); flex-shrink: 0;
         }
-
         .chat-input-box {
             flex-grow: 1; height: 42px; resize: none; border-radius: 8px;
             border: 1px solid var(--border); background-color: var(--bg-secondary);
-            color: var(--text-normal); padding: 10px; font-size: 0.95em;
-            box-sizing: border-box;
+            color: var(--text-normal); padding: 10px; font-size: 0.95em; box-sizing: border-box;
         }
-
         .chat-send-btn {
             background-color: var(--accent); color: var(--text-on-accent);
-            border: none; padding: 0 16px; border-radius: 8px;
-            cursor: pointer; font-weight: 600;
+            border: none; padding: 0 16px; border-radius: 8px; cursor: pointer; font-weight: 600;
         }
-
-        .chat-history-area {
-            flex-grow: 1; overflow-y: auto; padding: 12px;
-            display: flex; flex-direction: column; gap: 12px;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
-        }
+        .chat-history-area { flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 
         .msg-bubble { padding: 12px 14px; border-radius: 14px; max-width: 85%; font-size: 0.95em; line-height: 1.4; }
         .user-bubble { background-color: var(--user-bubble); color: var(--text-on-accent); align-self: flex-end; border-bottom-right-radius: 2px; }
@@ -76,74 +72,88 @@
         .error-bubble { background-color: rgba(243, 139, 168, 0.1); border: 1px solid #f38ba8; color: #f38ba8; align-self: center; text-align: center; }
 
         .file-download-badge {
-            margin-top: 8px; padding: 8px 12px; background: var(--bg-tertiary);
+            margin-top: 8px; padding: 6px 10px; background: var(--bg-tertiary);
             border: 1px solid var(--border); border-radius: 6px; display: inline-flex;
-            align-items: center; gap: 8px; cursor: pointer; font-size: 0.85em; color: var(--accent);
+            align-items: center; gap: 6px; cursor: pointer; font-size: 0.8em; color: var(--accent);
         }
 
-        .settings-modal {
-            display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95);
-            padding: 20px; flex-direction: column; justify-content: center; z-index: 100; box-sizing: border-box;
-        }
-        .settings-modal h2 { margin-top: 0; color: var(--accent); }
-        .settings-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
-        .settings-row label { font-size: 0.85em; color: var(--text-muted); font-weight: 500; }
-        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); font-size: 0.9em; }
+        /* Browser Portal Layout View */
+        .browser-wrapper { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .file-tree-sidebar { padding: 10px; background-color: var(--bg-secondary); border-bottom: 1px solid var(--border); max-height: 30%; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+        .file-item { padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.85em; background-color: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-normal); }
+        .file-item:hover { border-color: var(--accent); }
+        .preview-pane { flex-grow: 1; background: white; border: none; width: 100%; }
+        .empty-preview { display: flex; justify-content: center; align-items: center; height: 100%; color: var(--text-muted); text-align: center; padding: 20px; box-sizing: border-box; }
+
+        /* Setup Configurations Panel */
+        .settings-btn { position: absolute; top: 10px; right: 12px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-normal); border-radius: 14px; padding: 4px 10px; font-size: 0.8em; cursor: pointer; z-index: 10; }
+        .settings-modal { display: none; position: absolute; inset: 0; background: rgba(17,17,27,0.95); padding: 20px; flex-direction: column; justify-content: center; z-index: 100; box-sizing: border-box; }
+        .settings-row { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+        .settings-row label { font-size: 0.8em; color: var(--text-muted); }
+        .settings-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-normal); }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <div class="chat-header">
-        <span>Memory Tree Core</span>
-        <button class="settings-btn" onclick="toggleSettings(true)">⚙ Setup</button>
+    <button class="settings-btn" onclick="toggleSettings(true)">⚙ Setup</button>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" id="tab-chat" onclick="switchView('chat')">💬 Workspace</button>
+        <button class="tab-btn" id="tab-browser" onclick="switchView('browser')">🌐 Browser Portal</button>
     </div>
 
-    <div class="chat-input-container">
-        <textarea class="chat-input-box" id="user-input" placeholder="Execute structural note layers commands..."></textarea>
-        <button class="chat-send-btn" id="send-btn" onclick="handleMessage()">Send</button>
+    <div class="view-content active" id="view-chat">
+        <div class="chat-wrapper">
+            <div class="chat-input-container">
+                <textarea class="chat-input-box" id="user-input" placeholder="Map note structures..."></textarea>
+                <button class="chat-send-btn" id="send-btn" onclick="handleMessage()">Send</button>
+            </div>
+            <div class="chat-history-area" id="chat-stream"></div>
+        </div>
     </div>
 
-    <div class="chat-history-area" id="chat-stream"></div>
+    <div class="view-content" id="view-browser">
+        <div class="browser-wrapper">
+            <div class="file-tree-sidebar" id="file-tree-list"></div>
+            <div style="flex-grow: 1; display: flex; flex-direction: column;">
+                <div class="empty-preview" id="empty-preview-notice">
+                    <p>Select an architectural node file card above to load its live rendered canvas.</p>
+                </div>
+                <iframe class="preview-pane" id="browser-iframe" style="display: none;"></iframe>
+            </div>
+        </div>
+    </div>
 
     <div class="settings-modal" id="config-panel">
         <h2>Engine Credentials Setup</h2>
-        <div class="settings-row">
-            <label>API Key</label>
-            <input type="password" id="cfg-key" placeholder="AQ...">
-        </div>
-        <div class="settings-row">
-            <label>Model String</label>
-            <input type="text" id="cfg-model" value="gemini-3.5-flash">
-        </div>
-        <div class="settings-row">
-            <label>Endpoint Address URL</label>
-            <input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions">
-        </div>
-        <div class="settings-row">
-            <label>Google Apps Script Gateway URL</label>
-            <input type="text" id="cfg-gateway" placeholder="https://script.google.com/macros/s/.../exec">
-        </div>
+        <div class="settings-row"><label>API Key</label><input type="password" id="cfg-key"></div>
+        <div class="settings-row"><label>Model String</label><input type="text" id="cfg-model" value="gemini-3.5-flash"></div>
+        <div class="settings-row"><label>Endpoint Address URL</label><input type="text" id="cfg-url" value="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"></div>
+        <div class="settings-row"><label>Google Apps Script Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://script.google.com/macros/s/.../exec"></div>
         <button class="chat-send-btn" style="height: 44px; margin-top: 10px;" onclick="saveConfig()">Save Configurations</button>
     </div>
 </div>
 
 <script>
+    // LOAD BOTH CONFIG, FILE STORAGE, AND CHAT HISTORY FROM LOCALSTORAGE CACHE
     let config = JSON.parse(localStorage.getItem('local_agent_config')) || { key: '', model: 'gemini-3.5-flash', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', gateway: '' };
-    let conversationHistory = [];
+    let virtualFiles = JSON.parse(localStorage.getItem('persistent_file_vault')) || {};
+    let conversationHistory = JSON.parse(localStorage.getItem('persistent_chat_history')) || [];
+    let currentSelectedFile = null;
 
     window.onload = () => {
         document.getElementById('cfg-key').value = config.key;
         document.getElementById('cfg-model').value = config.model;
         document.getElementById('cfg-url').value = config.url;
         document.getElementById('cfg-gateway').value = config.gateway || '';
-        renderWelcomeBubble();
+        
+        rebuildChatUIFromCache();
+        updateFileTreeUI();
         if(!config.key || !config.gateway) toggleSettings(true);
     };
 
-    function toggleSettings(show) {
-        document.getElementById('config-panel').style.display = show ? 'flex' : 'none';
-    }
+    function toggleSettings(show) { document.getElementById('config-panel').style.display = show ? 'flex' : 'none'; }
 
     function saveConfig() {
         config.key = document.getElementById('cfg-key').value.trim();
@@ -154,12 +164,95 @@
         toggleSettings(false);
     }
 
-    function renderWelcomeBubble() {
+    function switchView(target) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.view-content').forEach(v => v.classList.remove('active'));
+        if (target === 'chat') {
+            document.getElementById('tab-chat').classList.add('active');
+            document.getElementById('view-chat').classList.add('active');
+        } else {
+            document.getElementById('tab-browser').classList.add('active');
+            document.getElementById('view-browser').classList.add('active');
+            updateFileTreeUI();
+        }
+    }
+
+    // Dynamic rendering of past messages from previous sessions
+    function rebuildChatUIFromCache() {
         const stream = document.getElementById('chat-stream');
-        const box = document.createElement('div');
-        box.className = "msg-bubble agent-bubble";
-        box.innerHTML = `System active. Gateway configurations enabled to bypass standard Safari CORS tracking blocks. Ready for execution commands.`;
-        stream.appendChild(box);
+        stream.innerHTML = '';
+        
+        if(conversationHistory.length === 0) {
+            const box = document.createElement('div');
+            box.className = "msg-bubble agent-bubble";
+            box.innerHTML = `System active. Ask me to map your 10-layer memory logs. All messages and notes persist across window closures automatically.`;
+            stream.appendChild(box);
+            return;
+        }
+
+        conversationHistory.forEach(msg => {
+            if(msg.role === 'system') return;
+            const box = document.createElement('div');
+            box.className = msg.role === 'user' ? "msg-bubble user-bubble" : "msg-bubble agent-bubble";
+            
+            if(msg.role === 'user') {
+                box.innerHTML = `<p style="margin:0; white-space:pre-wrap;">${msg.content}</p>`;
+            } else {
+                // Parse out file structures to append interactive button hooks back to UI elements
+                let cleanText = msg.content;
+                const regex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
+                let match;
+                
+                const txtPara = document.createElement('p');
+                txtPara.style.margin = "0";
+                txtPara.style.whiteSpace = "pre-wrap";
+                box.appendChild(txtPara);
+
+                while((match = regex.exec(msg.content)) !== null) {
+                    const path = match[1];
+                    const data = match[2];
+                    cleanText = cleanText.replace(match[0], '');
+                    
+                    const downBtn = document.createElement('div');
+                    downBtn.className = "file-download-badge";
+                    downBtn.innerHTML = `💾 Save File: <strong>${path.split('/').pop()}</strong>`;
+                    downBtn.onclick = () => downloadGeneratedFile(path, data);
+                    box.appendChild(downBtn);
+                }
+                txtPara.innerText = cleanText.trim() || 'Notes compiled to your persistent database:';
+            }
+            stream.appendChild(box);
+        });
+        stream.scrollTop = stream.scrollHeight;
+    }
+
+    function updateFileTreeUI() {
+        const strip = document.getElementById('file-tree-list');
+        strip.innerHTML = '';
+        const keys = Object.keys(virtualFiles);
+
+        if(keys.length === 0) {
+            strip.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85em; padding: 6px;">No structural notes saved in database cache yet.</div>`;
+            return;
+        }
+
+        keys.forEach(path => {
+            const card = document.createElement('div');
+            card.className = "file-item";
+            card.innerText = `📄 ${path.split('/').pop()}`;
+            card.onclick = () => launchPagePreview(path);
+            strip.appendChild(card);
+        });
+    }
+
+    function launchPagePreview(path) {
+        currentSelectedFile = path;
+        const iframe = document.getElementById('browser-iframe');
+        document.getElementById('empty-preview-notice').style.display = 'none';
+        iframe.style.display = 'block';
+
+        const rawHtml = virtualFiles[path] || "<h3>Blank Document</h3>";
+        iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:-apple-system,sans-serif;padding:16px;background:#fafafa;color:#333;line-height:1.4;} a{color:#7057c7;text-decoration:none;font-weight:bold;}</style></head><body>${rawHtml}</body></html>`;
     }
 
     function downloadGeneratedFile(filename, textData) {
@@ -190,83 +283,73 @@
         stream.scrollTop = stream.scrollHeight;
 
         conversationHistory.push({ role: "user", content: promptText });
+        localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
 
-        const baseSystemFramePrompt = `You are an interactive AI Hierarchical HTML Memory Website Builder Agent running inside a local browser file sandbox.
+        const baseSystemFramePrompt = `You are an interactive AI Hierarchical HTML Memory Website Builder Agent running inside a browser sandbox.
+        Your task is to generate clean, modular standalone HTML notes for a 10-layer deeply nested memory web layout.
         
-        Your primary task is to generate clean, modular, standalone HTML notes for a 10-layer deeply nested memory web layout.
-        
-        CRITICAL GENERATION SPECIFICATIONS:
-        1. If your response builds, structures, or updates a memory node note page, you MUST enclose that valid HTML page code string inside a functional tag block exactly like this:
-           <write_html path="Folder_Name/Sub_Folder/Note_Name.html">
-           <!DOCTYPE html>
-           <html>
-           </html>
+        CRITICAL RULES:
+        1. Wrap your file code cleanly inside a functional tag block exactly like this:
+           <write_html path="Folder/Note_Name.html">
+           <h3>Content Title</h3>
            </write_html>
-        2. Keep your conversational dialogue to the user OUTSIDE of these tag boundaries. Discuss what architectural steps you mapped out naturally. Never ask the user to copy-paste code.
-        3. Every HTML file you generate must lead with a clean Local Neighborhood TOC navigation panel displaying its direct parent link, internal anchors, and immediate child node items.`;
+        2. Speak conversationally OUTSIDE of the tags.`;
 
         try {
-            let fetchUrl = config.gateway ? config.gateway : config.url;
-            let fetchOptions = {};
+            const response = await fetch(config.gateway, {
+                method: 'POST',
+                redirect: 'follow',
+                body: JSON.stringify({
+                    url: config.url,
+                    key: config.key,
+                    model: config.model,
+                    messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ]
+                })
+            });
 
-            if (config.gateway) {
-                // FIXED: Omitting headers entirely simplifies the request format.
-                // This forces the browser to skip the preflightOPTIONS handshake entirely, bypassing CORS blocks.
-                fetchOptions = {
-                    method: 'POST',
-                    redirect: 'follow', // Forces Safari and Chrome to cleanly track Google's internal link redirection parameters
-                    body: JSON.stringify({
-                        url: config.url,
-                        key: config.key,
-                        model: config.model,
-                        messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ]
-                    })
-                };
-            } else {
-                fetchOptions = {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: config.model,
-                        messages: [ { role: 'system', content: baseSystemFramePrompt }, ...conversationHistory ],
-                        temperature: 0.3
-                    })
-                };
-            }
-
-            const response = await fetch(fetchUrl, fetchOptions);
-            if(response.status !== 200) throw new Error(`API Response Status Error: ${response.status}`);
+            if(response.status !== 200) throw new Error(`Server Sync Error: ${response.status}`);
             
             const data = await response.json();
             const aiResponseContent = data.choices[0].message.content;
+            
             conversationHistory.push({ role: "assistant", content: aiResponseContent });
+            localStorage.setItem('persistent_chat_history', JSON.stringify(conversationHistory));
 
             const agentBox = document.createElement('div');
             agentBox.className = "msg-bubble agent-bubble";
-
-            const htmlInterceptionRegex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
+            
+            const regex = /<write_html\s+path=["']([^"']+)["']\s*>([\s\S]*?)<\/write_html>/g;
             let match;
             let cleanText = aiResponseContent;
 
-            const textParagraph = document.createElement('p');
-            textParagraph.style.margin = "0";
-            textParagraph.style.whiteSpace = "pre-wrap";
-            agentBox.appendChild(textParagraph);
+            const txtPara = document.createElement('p');
+            txtPara.style.margin = "0";
+            txtPara.style.whiteSpace = "pre-wrap";
+            agentBox.appendChild(txtPara);
 
-            while ((match = htmlInterceptionRegex.exec(aiResponseContent)) !== null) {
-                const filePathKey = match[1].trim();
-                const fileHtmlDataContent = match[2].trim();
+            let vaultAltered = false;
+            while ((match = regex.exec(aiResponseContent)) !== null) {
+                const pathKey = match[1].trim();
+                const fileContent = match[2].trim();
                 
                 cleanText = cleanText.replace(match[0], '');
+                
+                // SAVE RAW CODE STREAM DIRECTLY INTO DEVICE LOCALSTORAGE VAULT
+                virtualFiles[pathKey] = fileContent;
+                vaultAltered = true;
 
                 const downBtn = document.createElement('div');
                 downBtn.className = "file-download-badge";
-                downBtn.innerHTML = `💾 Save File: <strong>${filePathKey.split('/').pop()}</strong>`;
-                downBtn.onclick = () => downloadGeneratedFile(filePathKey, fileHtmlDataContent);
+                downBtn.innerHTML = `💾 Save File: <strong>${pathKey.split('/').pop()}</strong>`;
+                downBtn.onclick = () => downloadGeneratedFile(pathKey, fileContent);
                 agentBox.appendChild(downBtn);
             }
 
-            textParagraph.innerText = cleanText.trim() || 'File compilation packages prepared below:';
+            if(vaultAltered) {
+                localStorage.setItem('persistent_file_vault', JSON.stringify(virtualFiles));
+            }
+
+            txtPara.innerText = cleanText.trim() || 'Notes compiled to your persistent database:';
             stream.appendChild(agentBox);
 
         } catch (e) {
